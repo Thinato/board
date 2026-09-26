@@ -1,0 +1,17 @@
+{
+  "name": "board-server",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.22.0",
+    "@huggingface/transformers": "3.8.1",
+    "ws": "^8.22.0"
+  }
+}

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Q&amp;A Board</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="toolbar">
+    <strong id="title">Q&amp;A Board</strong>
+    <span id="role" class="badge"></span>
+    <label><input type="checkbox" id="hideAnswered"> Hide answered</label>
+    <button id="fit">Fit</button>
+    <span class="mod-only">
+      <button id="shareBtn" title="Links for participants and moderators">Share</button>
+      <button id="suggest">Suggest groups</button>
+      <button id="sort" title="Groups first, then by votes; answered last">Sort</button>
+      <button id="presentBtn" title="Full screen, one question or group at a time">Present</button>
+      <button id="demo">Load demo</button>
+      <button id="importBtn">Import Slido</button><input type="file" id="import" accept=".json,application/json" hidden>
+      <button id="clear">Clear</button>
+    </span>
+    <span class="hint" id="help"></span>
+    <button class="badge" id="status" disabled></button>
+  </header>
+
+  <main id="viewport">
+    <div id="world"></div>
+  </main>
+
+  <aside id="suggestions" hidden></aside>
+
+  <section id="present" hidden aria-live="polite"></section>
+
+  <dialog id="share"></dialog>
+
+  <form id="landing">
+    <h1>Q&amp;A Board</h1>
+    <p>Anonymous questions for meetings, grouped by similarity.</p>
+    <p id="landing-problem" hidden></p>
+    <input id="roomTitle" maxlength="80" placeholder="Room name, e.g. All-hands September" aria-label="Room name">
+    <button class="primary">Create a room</button>
+    <small>You’ll get a link for participants and one for moderators. Got a link already? Just open it.</small>
+  </form>
+
+  <form id="composer">
+    <div id="similar" hidden></div>
+    <div class="row">
+      <textarea id="draft" maxlength="200" rows="1" placeholder="Ask anonymously… (Enter to post)" aria-label="Your question"></textarea>
+      <span id="count" aria-live="polite">0/200</span>
+      <button type="submit">Post</button>
+    </div>
+  </form>
+
+  <script src="app.js"></script>
+</body>
+</html>
