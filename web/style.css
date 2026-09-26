@@ -159,3 +159,16 @@ body.landing #landing {
 #landing button:disabled { opacity: .5; }
 #landing small { color: var(--muted); }
 #landing-problem { color: #b91c1c !important; }
+
+/* Collapsed suggestions: a tab on the right edge with a badge */
+#suggestTab {
+  position: fixed; right: 0; top: 50%; transform: translateY(-50%); z-index: 10;
+  padding: 14px 8px 14px 10px; border-radius: 10px 0 0 10px; border-right: 0;
+  font-size: 18px; line-height: 1; box-shadow: 0 4px 12px rgb(0 0 0 / .08);
+}
+#suggestTab[hidden] { display: none; }
+#suggestCount {
+  position: absolute; top: -8px; left: -8px; min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 99px; background: #e11d48; color: #fff; font: 700 12px/20px system-ui, sans-serif; text-align: center;
+}
+#suggestCount[hidden] { display: none; }

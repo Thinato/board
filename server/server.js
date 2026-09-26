@@ -102,8 +102,9 @@ const server = http.createServer(async (req, res) => {
 });
 
 // ---------- WebSocket ----------
-// Client -> server: { t: 'hello', room, key?, voter }, then { t: 'op', op, args }, { t: 'similar', text, seq }, { t: 'suggest' }
-// Server -> client: hello { role, me, title, embeddings }, state { state }, reply { op, ... }, similar, suggestions, error
+// Client -> server: { t: 'hello', room, key?, voter }, then { t: 'op', op, args }, { t: 'similar', text, seq }
+// Server -> client: hello { role, me, title, embeddings }, state { state }, reply { op, ... }, similar, error,
+//                   and to moderators only: suggestions { threshold, groups }, pushed whenever they change
 
 const wss = new WebSocketServer({
   noServer: true,
@@ -168,9 +169,11 @@ wss.on('connection', ws => {
       if (ws.readyState !== 1) return;
       room = r;
       ctx = { role: room.isModKey(m.key) ? 'mod' : 'participant', me: room.voterHash(m.voter) };
+      ws.role = ctx.role;
       rooms.join(room, ws);
       send(ws, { t: 'hello', role: ctx.role, me: ctx.me, title: room.doc.title, embeddings: E.backend.name });
       ws.send(room.stateMessage());
+      if (ctx.role === 'mod') room.greetMod(ws);
       return;
     }
 
@@ -185,9 +188,6 @@ wss.on('connection', ws => {
         else if (res.reply) send(ws, { t: 'reply', op: m.op, ...res.reply });
       } else if (m.t === 'similar' && typeof m.text === 'string') {
         send(ws, { t: 'similar', seq: m.seq, match: await room.similar(m.text.trim().slice(0, 200)) });
-      } else if (m.t === 'suggest') {
-        if (ctx.role !== 'mod') return send(ws, { t: 'error', msg: 'moderators only' });
-        send(ws, { t: 'suggestions', ...(await room.suggest()) });
       }
     } catch (err) {
       console.error(err);

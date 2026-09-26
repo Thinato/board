@@ -8,6 +8,9 @@ const { apply, emptyState, pairKey } = require('./ops.js');
 
 const BROADCAST_MS = 150;  // coalesce bursts (a vote storm) into one state message
 const SAVE_MS = 5000;      // at most one write per room every 5 s
+const SUGGEST_MS = 1000;   // re-run grouping at most once a second per room
+// Ops after which suggestions can change (questions added or reopened, pairs kept apart, groups formed).
+const RESUGGEST = new Set(['ask', 'add', 'demo', 'answer', 'drop', 'group', 'apart', 'unapart', 'clear']);
 
 const sha256 = s => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -29,7 +32,8 @@ async function vectors(texts) {
 
 class Room {
   constructor(store, doc) {
-    Object.assign(this, { store, doc, sockets: new Set(), dirty: false, saving: null, broadcastTimer: null, saveTimer: null });
+    Object.assign(this, { store, doc, sockets: new Set(), dirty: false, saving: null, broadcastTimer: null, saveTimer: null,
+      suggestTimer: null, suggesting: false, suggestAgain: false, lastSuggestions: null });
   }
 
   get state() { return this.doc.state; }
@@ -45,8 +49,38 @@ class Room {
 
   apply(op, args, ctx) {
     const res = apply(this.state, op, args, ctx);
-    if (res.ok) this.changed();
+    if (res.ok) {
+      this.changed();
+      if (RESUGGEST.has(op)) this.suggestTimer ??= setTimeout(() => { this.suggestTimer = null; this.pushSuggestions(); }, SUGGEST_MS);
+    }
     return res;
+  }
+
+  mods() { return [...this.sockets].filter(ws => ws.role === 'mod' && ws.readyState === 1); }
+
+  // Suggestions go to every moderator in the room, never to participants. One run at a time;
+  // a change during a run triggers one more run afterwards.
+  async pushSuggestions() {
+    if (this.suggesting) { this.suggestAgain = true; return; }
+    this.suggesting = true;
+    try {
+      do {
+        this.suggestAgain = false;
+        if (!this.mods().length) { this.lastSuggestions = null; return; }
+        this.lastSuggestions = JSON.stringify({ t: 'suggestions', ...(await this.suggest()) });
+        for (const ws of this.mods()) ws.send(this.lastSuggestions);
+      } while (this.suggestAgain);
+    } catch (err) {
+      console.error(`suggest ${this.doc.id} failed:`, err);
+    } finally {
+      this.suggesting = false;
+    }
+  }
+
+  // A moderator joining gets the current suggestions right away.
+  greetMod(ws) {
+    if (this.lastSuggestions) ws.send(this.lastSuggestions);
+    else this.pushSuggestions();
   }
 
   changed() {
@@ -84,7 +118,9 @@ class Room {
   }
 
   // Suggested groups over unanswered questions, with each pair's similarity so the client can show
-  // (and recompute, after removing a card) how well each card fits: [{ ids, sim: [[...]] }]
+  // (and recompute, after removing a card) how well each card fits: [{ ids, sim: [[...]] }].
+  // Grouped questions are included so a new duplicate can join a group; a suggestion whose cards
+  // are all grouped already has nothing left to do and is left out.
   async suggest() {
     const pool = Object.values(this.state.questions).filter(q => !q.answered);
     const vecs = await vectors(pool.map(q => q.text));
@@ -93,6 +129,7 @@ class Room {
     return {
       threshold: E.backend.threshold,
       groups: E.cluster(pool, vecs, E.backend.threshold, (a, b) => apart.has(pairKey(a, b)))
+        .filter(ids => ids.some(id => !this.state.questions[id].groupId))
         .map(ids => ({ ids, sim: ids.map(a => ids.map(b => +E.similarity(byId.get(a), byId.get(b)).toFixed(3))) })),
     };
   }

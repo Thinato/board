@@ -51,6 +51,7 @@ let fitNext = true;            // fit the view to the board once the next state 
 
 const HIDDEN_MS = 5 * 60e3, IDLE_MS = 30 * 60e3;
 let ws = null, retries = 0, reconnectTimer = null, hiddenTimer = null, lastInput = Date.now();
+let restarting = false;       // the server said it's restarting (1012): keep trying until it's back
 
 function connect() {
   clearTimeout(reconnectTimer);
@@ -64,8 +65,10 @@ function connect() {
     ws = null;
     if (e.code === 4404) return showLanding('This room doesn’t exist, or it expired after 90 days without activity.');
     if (document.hidden) return setStatus('paused');
-    // 1012: the server is restarting (a deploy), so come back whether or not anyone is around.
-    if (e.code !== 1012 && Date.now() - lastInput > IDLE_MS) return setStatus('offline');
+    // 1012: the server is restarting (a deploy), so come back whether or not anyone is around, including
+    // through the failed attempts while the new instance starts.
+    if (e.code === 1012) restarting = true;
+    if (!restarting && Date.now() - lastInput > IDLE_MS) return setStatus('offline');
     reconnectTimer = setTimeout(connect, Math.min(10000, 500 * 2 ** retries++));
     setStatus('reconnecting');
   };
@@ -108,6 +111,7 @@ let lastAsked = '';
 function onMessage(m) {
   if (m.t === 'hello') {
     retries = 0;
+    restarting = false;
     me = m.me;
     IS_MOD = m.role === 'mod';
     showRole();
@@ -122,8 +126,7 @@ function onMessage(m) {
     suggestThreshold = m.threshold;
     for (const g of m.groups) g.ids.forEach((a, i) => g.ids.forEach((b, j) => pairSim.set(pairKey(a, b), g.sim[i][j])));
     suggestions = m.groups.map(g => g.ids);
-    $('#suggestions').hidden = false;
-    render();
+    render(); // outlines the cards and updates the tab's badge; the panel opens only when asked
   } else if (m.t === 'similar') {
     showSimilarResult(m);
   } else if (m.t === 'reply' && m.op === 'add') {
@@ -191,6 +194,7 @@ function render() {
   }
   world.replaceChildren(...nodes);
   renderSuggestions();
+  showSuggestTab();
   renderPresentation();
   applyView();
 }
@@ -370,8 +374,7 @@ const keepApart = (ids, others) => op('apart', {
 });
 
 // The server clusters unanswered questions (grouped ones too, so a new duplicate can join a group)
-// and replies with a `suggestions` message.
-const suggest = () => send({ t: 'suggest' });
+// The server re-runs grouping whenever questions change and pushes `suggestions` to moderators.
 
 // Drop suggestions that no longer have anything left to do.
 function pruneSuggestions() {
@@ -413,9 +416,19 @@ function renderSuggestions() {
       el.style.setProperty('--suggest', COLORS[i % COLORS.length]);
       return el;
     }),
-    ...(state.apart.length ? [h('button', { onclick: () => { op('unapart'); suggest(); } }, 'Undo dismissals'), ' '] : []),
-    h('button', { onclick: () => { panel.hidden = true; suggestions = []; render(); } }, 'Close'));
+    ...(state.apart.length ? [h('button', { onclick: () => op('unapart') }, 'Undo dismissals'), ' '] : []),
+    h('button', { onclick: () => { panel.hidden = true; render(); } }, 'Close'));
 }
+
+// Collapsed sidebar: a tab on the right edge, badged with how many groups are waiting to be merged.
+function showSuggestTab() {
+  const tab = $('#suggestTab');
+  tab.hidden = !IS_MOD || !$('#suggestions').hidden;
+  $('#suggestCount').hidden = !suggestions.length;
+  $('#suggestCount').textContent = suggestions.length;
+  tab.title = suggestions.length ? `${suggestions.length} suggested group${suggestions.length > 1 ? 's' : ''} to merge` : 'Suggested groups';
+}
+$('#suggestTab').addEventListener('click', () => { $('#suggestions').hidden = false; render(); });
 
 // ---------- Canvas interactions ----------
 
@@ -590,7 +603,6 @@ function showRole() {
 $('#status').addEventListener('click', () => { retries = 0; lastInput = Date.now(); connect(); });
 $('#hideAnswered').addEventListener('change', render);
 $('#fit').addEventListener('click', fit);
-$('#suggest').addEventListener('click', suggest);
 $('#sort').addEventListener('click', sortBoard);
 $('#presentBtn').addEventListener('click', startPresenting);
 $('#demo').addEventListener('click', () => { op('demo'); fitNext = true; });

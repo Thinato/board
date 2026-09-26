@@ -83,8 +83,6 @@ test('rooms, roles, broadcast, privacy and persistence', async t => {
       guest.op(op, args);
       assert.strictEqual((await guest.next(m => m.t === 'error' && m.op === op)).msg, 'moderators only');
     }
-    guest.send({ t: 'suggest' });
-    await guest.next(m => m.t === 'error' && m.msg === 'moderators only');
     assert.strictEqual(Object.values(mod.state.questions)[0].answered, false);
   });
 
@@ -100,9 +98,14 @@ test('rooms, roles, broadcast, privacy and persistence', async t => {
   await t.test('moderator ops, suggestions and the similar hint', async () => {
     mod.op('demo', {});
     await guest.next(stateWith(s => texts(s).length === 13));
-    mod.send({ t: 'suggest' });
-    const { groups } = await mod.next(m => m.t === 'suggestions');
-    assert.ok(groups.length >= 3 && groups.every(g => g.ids.length === g.sim.length));
+    // New questions re-run grouping on their own, and only moderators hear about it.
+    const { groups } = await mod.next(m => m.t === 'suggestions' && m.groups.length >= 3, 5000);
+    assert.ok(groups.every(g => g.ids.length === g.sim.length));
+    assert.ok(![...guest.msgs, ...impostor.msgs].some(m => m.t === 'suggestions'), 'participants never get suggestions');
+    const late = connect(roomId, { key: modKey });
+    await late.ready;
+    assert.ok((await late.next(m => m.t === 'suggestions')).groups.length >= 3, 'a moderator joining gets them right away');
+    late.ws.close();
     mod.op('group', { ids: groups[0].ids, slot: { x: 900, y: 0 } });
     mod.op('apart', { pairs: [[groups[1].ids[0], groups[1].ids[1]]] });
     await guest.next(stateWith(s => Object.keys(s.groups).length === 1 && s.apart.length === 1));
@@ -133,7 +136,7 @@ test('rooms, roles, broadcast, privacy and persistence', async t => {
     }
     const flood = connect(roomId);
     await flood.ready;
-    for (let i = 0; i < 40; i++) flood.send({ t: 'similar', text: 'uma pergunta qualquer número ' + i, seq: i });
+    for (let i = 0; i < 200; i++) flood.send({ t: 'similar', text: 'uma pergunta qualquer número ' + i, seq: i });
     assert.strictEqual((await flood.next(m => m.t === 'closed', 5000)).code, 1008, 'backlog over 20 closes the socket');
     assert.strictEqual((await fetch(`${BASE}/health`)).status, 200);
   });
