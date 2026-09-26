@@ -16,6 +16,14 @@ variable "github_repository" {
   default     = "Thinato/board"
 }
 
+# GitHub's immutable OIDC subject for this repo (owner and repo ids included), so a deleted and
+# re-created repo with the same name can't deploy: gh api repos/Thinato/board/actions/oidc/customization/sub
+variable "github_subject_prefix" {
+  description = "OIDC `sub` prefix of the repo, as GitHub issues it (sub_claim_prefix)."
+  type        = string
+  default     = "repo:Thinato@39924528/board@1389396087"
+}
+
 variable "allowed_origins" {
   description = "Browser origins allowed to create rooms and open sockets (localhost is always allowed, for development)."
   type        = list(string)

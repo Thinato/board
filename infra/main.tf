@@ -166,6 +166,7 @@ resource "google_cloud_run_v2_service" "board" {
       template[0].containers[0].image,
       client,
       client_version,
+      scaling, # service-level block the API echoes back empty; instance limits live in template.scaling
     ]
   }
 
@@ -219,7 +220,7 @@ resource "google_service_account" "deployer" {
 resource "google_service_account_iam_member" "deployer_wif" {
   service_account_id = google_service_account.deployer.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principal://iam.googleapis.com/${local.pool}/subject/repo:${var.github_repository}:ref:refs/heads/main"
+  member             = "principal://iam.googleapis.com/${local.pool}/subject/${var.github_subject_prefix}:ref:refs/heads/main"
 }
 
 # Scoped to board's own resources, not the project.
