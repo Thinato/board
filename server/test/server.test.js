@@ -135,7 +135,7 @@ test('rooms, roles, broadcast, privacy and persistence', async t => {
     await flood.ready;
     for (let i = 0; i < 40; i++) flood.send({ t: 'similar', text: 'uma pergunta qualquer número ' + i, seq: i });
     assert.strictEqual((await flood.next(m => m.t === 'closed', 5000)).code, 1008, 'backlog over 20 closes the socket');
-    assert.strictEqual((await fetch(`${BASE}/healthz`)).status, 200);
+    assert.strictEqual((await fetch(`${BASE}/health`)).status, 200);
   });
 
   await t.test('unknown rooms and foreign origins are refused', async () => {

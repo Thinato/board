@@ -151,12 +151,12 @@ resource "google_cloud_run_v2_service" "board" {
         value = join(",", var.allowed_origins)
       }
 
+      # Port open = started (the model loads in the background). Not an HTTP probe on a health path:
+      # Cloud Run's front end reserves paths ending in z, so /healthz is easy to get wrong.
       startup_probe {
-        http_get {
-          path = "/healthz"
+        tcp_socket {
+          port = 8080
         }
-        period_seconds    = 2
-        failure_threshold = 30
       }
     }
   }

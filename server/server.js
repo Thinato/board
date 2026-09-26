@@ -83,7 +83,8 @@ const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin;
   const cors = origin && originOk(origin) ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {};
   try {
-    if (req.url === '/healthz') return json(res, 200, { ok: true, embeddings: E.backend.name, rooms: rooms.live.size });
+    // Not /healthz: Cloud Run's front end reserves paths ending in z and never forwards them.
+    if (req.url === '/health') return json(res, 200, { ok: true, embeddings: E.backend.name, rooms: rooms.live.size });
     if (req.url === '/rooms') {
       if (!originOk(origin)) return json(res, 403, { error: 'origin not allowed' });
       if (req.method === 'OPTIONS') {

@@ -10,7 +10,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
   let health;
   for (let i = 0; i < 60; i++) {
-    health = await fetch(`${BASE}/healthz`).then(r => r.json()).catch(() => null);
+    health = await fetch(`${BASE}/health`).then(r => r.json()).catch(() => null);
     if (health && health.embeddings !== 'loading model…') break;
     await sleep(2000);
   }
