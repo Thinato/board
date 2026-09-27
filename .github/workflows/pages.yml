@@ -1,6 +1,6 @@
 # Publishes web/ to GitHub Pages. Served at lisecki.dev/board/ because the user site
 # Thinato/thinato.github.io carries the lisecki.dev domain and project sites inherit it.
-# Only the page's three files are uploaded: server/, infra/ and any Slido export can't leak through the site.
+# Only the page (one file, style and script inlined) is uploaded: server/, infra/ and any Slido export can't leak through the site.
 
 name: Site
 
@@ -32,8 +32,21 @@ jobs:
 
       # Publish an allowlist, not the folder: nothing else that lands in web/ (say, a renamed
       # Slido export with real meeting questions) can reach the site.
+      # The style and script are inlined into index.html: Pages' CDN caches each file for up to
+      # 10 minutes on its own, so separate files could pair an old page with a new script after a deploy.
       - name: Collect the page
-        run: mkdir _site && cp web/index.html web/app.js web/style.css _site/
+        run: |
+          mkdir _site
+          node -e '
+            const fs = require("fs"), read = f => fs.readFileSync("web/" + f, "utf8");
+            const css = read("style.css"), js = read("app.js");
+            if (/<\/style/i.test(css) || /<\/script|<!--/i.test(js)) throw new Error("cannot inline: closing tag in source");
+            let html = read("index.html"), n = 0;
+            html = html.replace(`<link rel="stylesheet" href="style.css">`, () => (n++, `<style>\n${css}</style>`))
+                       .replace(`<script src="app.js"></script>`, () => (n++, `<script>\n${js}</script>`));
+            if (n !== 2) throw new Error("style.css or app.js tag not found in index.html");
+            fs.writeFileSync("_site/index.html", html);
+          '
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
