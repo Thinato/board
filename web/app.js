@@ -14,7 +14,9 @@ try {
   if (LINK.has('k')) history.replaceState(null, '', `#r=${ROOM}`); // no hashchange event, so no reload
 } catch {} // storage blocked: the key just stays in the URL
 let IS_MOD = false;            // set by the server's hello, from the key
-const COLORS = ['#e11d48', '#0284c7', '#d97706', '#059669', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#9333ea', '#ea580c'];
+// Suggested groups: numbered, and colored with hues far apart that also differ in lightness.
+// Blue is the page's accent and orange its attention color, so neither is used here.
+const COLORS = ['#0f766e', '#7c3aed', '#4d7c0f', '#334155'];
 const $ = s => document.querySelector(s);
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const votes = q => q.voters.length + (q.imported || 0); // imported: Slido/demo vote counts
@@ -26,6 +28,41 @@ function h(tag, props = {}, ...kids) {
   el.append(...kids.filter(k => k != null && k !== false));
   return el;
 }
+
+// Lucide icons (lucide.dev, ISC license): the inner markup of each 24×24 stroke icon.
+const ICONS = {
+  messages: '<path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  presentation: '<path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/>',
+  fit: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>',
+  eyeOff: '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>',
+  sort: '<path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M11 4h10"/><path d="M11 8h7"/><path d="M11 12h4"/>',
+  more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8 12 3 7 8"/><path d="M12 3v12"/>',
+  flask: '<path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+  send: '<path d="M3.714 3.048a.498.498 0 0 0-.683.627l2.843 7.627a2 2 0 0 1 0 1.396l-2.842 7.627a.498.498 0 0 0 .682.627l18-8.5a.5.5 0 0 0 0-.904z"/><path d="M6 12h16"/>',
+  up: '<path d="m18 15-6-6-6 6"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  checkAll: '<path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/>',
+  reopen: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  group: '<path d="M3 7V5c0-1.1.9-2 2-2h2"/><path d="M17 3h2c1.1 0 2 .9 2 2v2"/><path d="M21 17v2c0 1.1-.9 2-2 2h-2"/><path d="M7 21H5c-1.1 0-2-.9-2-2v-2"/><rect width="7" height="5" x="7" y="7" rx="1"/><rect width="7" height="5" x="10" y="12" rx="1"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
+  left: '<path d="m15 18-6-6 6-6"/>',
+  right: '<path d="m9 18 6-6-6-6"/>',
+  arrowLeft: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  arrowRight: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+};
+function icon(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const attrs = { class: 'icon', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' };
+  for (const [k, v] of Object.entries(attrs)) svg.setAttribute(k, v);
+  svg.innerHTML = ICONS[name]; // constant markup from the table above, never user input
+  return svg;
+}
+document.querySelectorAll('[data-icon]').forEach(el => el.prepend(icon(el.dataset.icon)));
 
 // Anonymous, private per-browser id: the server only ever shows others a per-room hash of it (`me`).
 let voterId = null;
@@ -154,21 +191,25 @@ function render() {
   if (drag) { renderPending = true; return; }
   renderPending = false;
   pruneSuggestions();
-  const hide = $('#hideAnswered').checked;
-  const suggestColor = {};
-  suggestions.forEach((ids, i) => ids.forEach(id => (suggestColor[id] = COLORS[i % COLORS.length])));
+  const hide = $('#hideAnswered').ariaPressed === 'true';
+  const suggestNo = {};
+  suggestions.forEach((ids, i) => ids.forEach(id => (suggestNo[id] = i)));
 
   const card = q => {
     const el = h('div', { className: 'card' + (q.answered ? ' answered' : '') + (q.voters.includes(me) ? ' voted' : '') },
       h('p', { className: 'text' }, q.text),
       h('div', { className: 'row' },
-        h('button', { className: 'vote', title: 'Upvote' }, `▲ ${votes(q)}`),
+        h('button', { className: 'vote', title: 'Upvote', ariaLabel: `Upvote, ${votes(q)} votes` }, icon('up'), `${votes(q)}`),
         h('span', { className: 'spacer' }),
-        q.answered && h('span', { className: 'answered-tag' }, 'Answered'),
-        IS_MOD && h('button', { className: 'answer', title: q.answered ? 'Reopen' : 'Mark answered' }, q.answered ? '↺' : '✓')));
+        q.answered && h('span', { className: 'answered-tag' }, icon('check'), 'Answered'),
+        IS_MOD && h('button', { className: 'answer', title: q.answered ? 'Reopen' : 'Mark answered', ariaLabel: q.answered ? 'Reopen' : 'Mark answered' },
+          icon(q.answered ? 'reopen' : 'check'))));
     el.dataset.id = q.id;
     if (!q.groupId) Object.assign(el.style, { left: q.x + 'px', top: q.y + 'px' });
-    if (suggestColor[q.id]) { el.dataset.suggest = ''; el.style.setProperty('--suggest', suggestColor[q.id]); }
+    if (q.id in suggestNo) { // numbered outline, matching the suggestion's number in the sidebar
+      el.dataset.suggest = suggestNo[q.id] + 1;
+      el.style.setProperty('--suggest', COLORS[suggestNo[q.id] % COLORS.length]);
+    }
     return el;
   };
 
@@ -182,8 +223,9 @@ function render() {
     const el = h('section', { className: 'group' + (answered ? ' answered' : '') },
       h('header', {},
         IS_MOD ? h('input', { className: 'title', value: title, title: 'Rename group' }) : h('span', { className: 'title' }, title),
-        h('span', { className: 'total', title: 'Combined votes · questions' }, `▲ ${totalVotes(all)} · ${all.length}`),
-        IS_MOD && h('button', { className: 'answer-group', title: answered ? 'Reopen all' : 'Mark all answered' }, answered ? '↺' : '✓')),
+        h('span', { className: 'total', title: 'Combined votes · questions' }, icon('up'), `${totalVotes(all)} · ${all.length}`),
+        IS_MOD && h('button', { className: 'answer-group', title: answered ? 'Reopen all' : 'Mark all answered', ariaLabel: answered ? 'Reopen all' : 'Mark all answered' },
+          icon(answered ? 'reopen' : 'checkAll'))),
       h('div', { className: 'members' }, ...all.filter(q => !(hide && q.answered)).map(card)));
     el.dataset.gid = g.id;
     Object.assign(el.style, { left: g.x + 'px', top: g.y + 'px' });
@@ -324,18 +366,18 @@ function renderPresentation() {
   presentBox.replaceChildren(...[
     h('header', {},
       h('span', { className: 'progress' }, `${all.length - left.length} of ${all.length} answered`),
-      h('button', { onclick: stopPresenting }, 'Exit (Esc)')),
+      h('button', { onclick: stopPresenting }, icon('x'), 'Exit (Esc)')),
     cur ? h('main', { className: cur.group ? 'is-group' : '' },
-      h('p', { className: 'meta' }, cur.group ? `${cur.qs.length} related questions · ▲ ${cur.votes}` : `▲ ${cur.votes}`),
+      h('p', { className: 'meta' }, cur.group ? `${cur.qs.length} related questions · ` : '', icon('up'), `${cur.votes}`),
       cur.group?.title && h('h2', {}, cur.group.title),
       h('ul', {}, ...cur.qs.map(q => h('li', { className: q.answered ? 'answered' : '' },
-        cur.group && h('span', { className: 'votes' }, q.answered ? '✓' : `▲ ${votes(q)}`),
+        cur.group && h('span', { className: 'votes' }, ...(q.answered ? [icon('check')] : [icon('up'), `${votes(q)}`])),
         h('span', { className: 'text' }, q.text)))))
       : h('main', { className: 'done' }, h('h2', {}, all.length ? 'All questions answered 🎉' : 'No questions yet')),
     h('footer', {},
-      h('button', { className: 'back', onclick: back, disabled: !presentHistory.length, title: 'Back to the previous question, undoing its answer or skip (← or Backspace)' }, '← Back'),
-      cur && h('button', { onclick: skip }, 'Skip (→)'),
-      cur && h('button', { className: 'primary', onclick: answerCurrent }, cur.group ? '✓ Mark group answered (Enter)' : '✓ Mark answered (Enter)')),
+      h('button', { className: 'back', onclick: back, disabled: !presentHistory.length, title: 'Back to the previous question, undoing its answer or skip (← or Backspace)' }, icon('arrowLeft'), 'Back'),
+      cur && h('button', { onclick: skip, title: 'Skip (→)' }, 'Skip', icon('arrowRight')),
+      cur && h('button', { className: 'primary', onclick: answerCurrent }, icon('check'), cur.group ? 'Mark group answered (Enter)' : 'Mark answered (Enter)')),
   ].filter(Boolean));
 }
 
@@ -395,9 +437,11 @@ function renderSuggestions() {
   const panel = $('#suggestions');
   if (panel.hidden) return;
   panel.replaceChildren(
-    h('h3', {}, suggestions.length ? `Suggested groups (${suggestions.length})` : 'No similar questions found'),
+    h('h3', {}, suggestions.length ? 'Suggested groups' : 'No similar questions found',
+      suggestions.length > 0 && h('span', { className: 'count' }, suggestions.length)),
     ...suggestions.map((ids, i) => {
       const el = h('div', { className: 'suggestion' },
+        h('header', {}, h('span', { className: 'no' }, i + 1), `${ids.length} questions`),
         // Best fit first, so the card most worth removing sits at the bottom.
         h('ul', {}, ...ids.map(id => [id, fitScore(id, ids)]).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0)).map(([id, score]) => h('li', {},
           score != null && h('span', {
@@ -410,25 +454,28 @@ function renderSuggestions() {
           h('button', {
             className: 'remove', title: 'Not part of this group', ariaLabel: 'Remove from this suggestion',
             onclick: () => { keepApart([id], ids); suggestions[i] = ids.filter(x => x !== id); render(); },
-          }, '×')))),
-        h('button', { onclick: () => acceptSuggestion(ids) }, 'Accept'), ' ',
-        h('button', { onclick: () => { keepApart(ids, ids); suggestions.splice(i, 1); render(); } }, 'Dismiss'));
+          }, icon('x'))))),
+        h('button', { className: 'primary', onclick: () => acceptSuggestion(ids) }, icon('group'), 'Group them'),
+        h('button', { onclick: () => { keepApart(ids, ids); suggestions.splice(i, 1); render(); } }, icon('x'), 'Dismiss'));
       el.style.setProperty('--suggest', COLORS[i % COLORS.length]);
       return el;
     }),
-    ...(state.apart.length ? [h('button', { onclick: () => op('unapart') }, 'Undo dismissals'), ' '] : []),
-    h('button', { onclick: () => { panel.hidden = true; render(); } }, 'Close'));
+    ...(state.apart.length ? [h('button', { className: 'undo', onclick: () => op('unapart') }, icon('undo'), 'Undo dismissals')] : []));
 }
 
-// Collapsed sidebar: a tab on the right edge, badged with how many groups are waiting to be merged.
+// The sidebar's tab: on the screen edge when closed, on the panel's edge when open, so it can always be
+// toggled. Badged with how many groups are waiting to be merged.
 function showSuggestTab() {
-  const tab = $('#suggestTab');
-  tab.hidden = !IS_MOD || !$('#suggestions').hidden;
-  $('#suggestCount').hidden = !suggestions.length;
-  $('#suggestCount').textContent = suggestions.length;
-  tab.title = suggestions.length ? `${suggestions.length} suggested group${suggestions.length > 1 ? 's' : ''} to merge` : 'Suggested groups';
+  const tab = $('#suggestTab'), open = !$('#suggestions').hidden, n = suggestions.length;
+  tab.hidden = !IS_MOD;
+  document.body.classList.toggle('suggest-open', open);
+  tab.ariaExpanded = open;
+  tab.replaceChildren(icon('group'), icon(open ? 'right' : 'left'), $('#suggestCount'));
+  $('#suggestCount').hidden = !n || open; // the open panel's header shows the count
+  $('#suggestCount').textContent = n;
+  tab.ariaLabel = tab.title = open ? 'Hide suggested groups' : n ? `${n} suggested group${n > 1 ? 's' : ''} to merge` : 'Suggested groups';
 }
-$('#suggestTab').addEventListener('click', () => { $('#suggestions').hidden = false; render(); });
+$('#suggestTab').addEventListener('click', () => { $('#suggestions').hidden = !$('#suggestions').hidden; render(); });
 
 // ---------- Canvas interactions ----------
 
@@ -566,7 +613,7 @@ function showSimilarResult(m) {
     h('button', {
       type: 'button', disabled: already,
       onclick: () => { upvote(best.id, false); draft.value = ''; showCount(); showSimilar(); },
-    }, already ? 'You upvoted it' : '▲ Upvote it instead'));
+    }, icon('up'), already ? 'You upvoted it' : 'Upvote it instead'));
 }
 
 $('#composer').addEventListener('submit', e => { e.preventDefault(); post(); });
@@ -601,7 +648,19 @@ function showRole() {
 }
 
 $('#status').addEventListener('click', () => { retries = 0; lastInput = Date.now(); connect(); });
-$('#hideAnswered').addEventListener('change', render);
+$('#hideAnswered').addEventListener('click', e => {
+  const b = e.currentTarget, on = b.ariaPressed !== 'true';
+  b.ariaPressed = on;
+  b.dataset.tip = on ? 'Show answered' : 'Hide answered';
+  render();
+});
+// More: the rare board actions. Closes on a pick, a click elsewhere or Esc.
+const more = $('#more');
+const showMore = open => { more.hidden = !open; $('#moreBtn').ariaExpanded = open; };
+$('#moreBtn').addEventListener('click', () => showMore(more.hidden));
+more.addEventListener('click', e => e.target.closest('button') && showMore(false));
+addEventListener('pointerdown', e => { if (!e.target.closest('#more, #moreBtn')) showMore(false); });
+addEventListener('keydown', e => { if (e.key === 'Escape' && !more.hidden) { showMore(false); $('#moreBtn').focus(); } });
 $('#fit').addEventListener('click', fit);
 $('#sort').addEventListener('click', sortBoard);
 $('#presentBtn').addEventListener('click', startPresenting);
@@ -638,16 +697,16 @@ $('#shareBtn').addEventListener('click', () => {
       h('input', { readOnly: true, value: url, onfocus: e => e.target.select() }),
       h('button', {
         type: 'button',
-        onclick: e => navigator.clipboard.writeText(url).then(
-          () => (e.target.textContent = 'Copied'),
-          () => { e.target.previousSibling.select(); e.target.textContent = 'Press ⌘/Ctrl+C'; }), // clipboard blocked
-      }, 'Copy')),
+        onclick: e => { const b = e.currentTarget; navigator.clipboard.writeText(url).then(
+          () => (b.lastChild.textContent = 'Copied'),
+          () => { b.previousSibling.select(); b.lastChild.textContent = 'Press ⌘/Ctrl+C'; }); }, // clipboard blocked
+      }, icon('copy'), 'Copy')),
     h('small', {}, note));
   $('#share').replaceChildren(h('form', { method: 'dialog' },
     h('h3', {}, 'Invite people'),
     row('Participants', roomLink(), 'Ask and upvote anonymously.'),
     row('Moderators', roomLink(MOD_KEY), 'Full control: answer, group, clear. Share with care.'),
-    h('button', {}, 'Done')));
+    h('button', { className: 'primary' }, 'Done')));
   $('#share').showModal();
 });
 

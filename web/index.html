@@ -4,32 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Q&amp;A Board</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="toolbar">
+    <span class="logo" data-icon="messages"></span>
     <strong id="title">Q&amp;A Board</strong>
     <span id="role" class="badge"></span>
-    <label><input type="checkbox" id="hideAnswered"> Hide answered</label>
-    <button id="fit">Fit</button>
-    <span class="mod-only">
-      <button id="shareBtn" title="Links for participants and moderators">Share</button>
-      <button id="sort" title="Groups first, then by votes; answered last">Sort</button>
-      <button id="presentBtn" title="Full screen, one question or group at a time">Present</button>
-      <button id="demo">Load demo</button>
-      <button id="importBtn">Import Slido</button><input type="file" id="import" accept=".json,application/json" hidden>
-      <button id="clear">Clear</button>
-    </span>
     <span class="hint" id="help"></span>
     <button class="badge" id="status" disabled></button>
+    <button id="shareBtn" class="mod-only" data-icon="link">Share</button>
+    <button id="presentBtn" class="mod-only primary" data-icon="presentation" title="Full screen, one question or group at a time">Present</button>
   </header>
+
+  <nav id="tools" aria-label="Board tools">
+    <button id="fit" data-icon="fit" data-tip="Fit to screen" aria-label="Fit to screen"></button>
+    <button id="hideAnswered" data-icon="eyeOff" data-tip="Hide answered" aria-label="Hide answered" aria-pressed="false"></button>
+    <hr class="mod-only">
+    <button id="sort" class="mod-only" data-icon="sort" data-tip="Sort: groups first, then by votes" aria-label="Sort"></button>
+    <button id="moreBtn" class="mod-only" data-icon="more" data-tip="More" aria-label="More" aria-expanded="false" aria-controls="more"></button>
+    <div id="more" role="menu" hidden>
+      <button id="importBtn" role="menuitem" data-icon="upload">Import from Slido…</button><input type="file" id="import" accept=".json,application/json" hidden>
+      <button id="demo" role="menuitem" data-icon="flask">Load demo questions</button>
+      <hr>
+      <button id="clear" role="menuitem" class="danger" data-icon="trash">Clear board…</button>
+    </div>
+  </nav>
 
   <main id="viewport">
     <div id="world"></div>
   </main>
 
   <aside id="suggestions" hidden></aside>
-  <button id="suggestTab" hidden aria-label="Suggested groups">‹<span id="suggestCount" hidden></span></button>
+  <button id="suggestTab" hidden aria-expanded="false" aria-controls="suggestions"><span id="suggestCount" hidden></span></button>
 
   <section id="present" hidden aria-live="polite"></section>
 
@@ -49,7 +58,7 @@
     <div class="row">
       <textarea id="draft" maxlength="200" rows="1" placeholder="Ask anonymously… (Enter to post)" aria-label="Your question"></textarea>
       <span id="count" aria-live="polite">0/200</span>
-      <button type="submit">Post</button>
+      <button type="submit" class="primary" data-icon="send">Post</button>
     </div>
   </form>
 
