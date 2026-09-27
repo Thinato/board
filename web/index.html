@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Q&amp;A Board</title>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
+  <!-- Loaded without blocking the page: until it arrives, the system font stands in. -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,8 +16,8 @@
     <span id="role" class="badge"></span>
     <span class="hint" id="help"></span>
     <button class="badge" id="status" disabled></button>
-    <button id="shareBtn" class="mod-only" data-icon="link">Share</button>
-    <button id="presentBtn" class="mod-only primary" data-icon="presentation" title="Full screen, one question or group at a time">Present</button>
+    <button id="shareBtn" class="mod-only" data-icon="link" aria-label="Share"><span class="label">Share</span></button>
+    <button id="presentBtn" class="mod-only primary" data-icon="presentation" aria-label="Present" title="Full screen, one question or group at a time"><span class="label">Present</span></button>
   </header>
 
   <nav id="tools" aria-label="Board tools">
@@ -57,8 +58,8 @@
     <div id="similar" hidden></div>
     <div class="row">
       <textarea id="draft" maxlength="200" rows="1" placeholder="Ask anonymously… (Enter to post)" aria-label="Your question"></textarea>
-      <span id="count" aria-live="polite">0/200</span>
-      <button type="submit" class="primary" data-icon="send">Post</button>
+      <span id="count" aria-live="polite" hidden>0/200</span>
+      <button type="submit" class="primary" data-icon="send" aria-label="Post"><span class="label">Post</span></button>
     </div>
   </form>
 

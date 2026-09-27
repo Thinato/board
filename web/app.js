@@ -1,8 +1,9 @@
 // The server holds each room's state and runs the embedding model; this page renders what it sends
-// and sends ops back. Locally, `node server/server.js` serves this page and the socket on one origin.
-const SERVER = ['localhost', '127.0.0.1'].includes(location.hostname)
-  ? location.origin
-  : 'https://board-1004509196255.southamerica-east1.run.app';
+// and sends ops back. From lisecki.dev (GitHub Pages) it talks to Cloud Run; anywhere else, like
+// `node server/server.js` on localhost or on a laptop's LAN address for phone testing, page and socket share one origin.
+const SERVER = location.hostname === 'lisecki.dev'
+  ? 'https://board-1004509196255.southamerica-east1.run.app'
+  : location.origin;
 // Room links: participants get #r=<room>, moderators #r=<room>&k=<mod key>. The fragment never reaches a server log.
 // The key is then kept in this browser and dropped from the address bar, so a screen share doesn't show it.
 const LINK = new URLSearchParams(location.hash.slice(1));
@@ -68,7 +69,8 @@ document.querySelectorAll('[data-icon]').forEach(el => el.prepend(icon(el.datase
 let voterId = null;
 try { voterId = localStorage.getItem('board:voter'); } catch {}
 if (!/^[\w-]{16,64}$/.test(voterId || '')) {
-  voterId = crypto.randomUUID();
+  // randomUUID needs a secure context; a phone testing over plain http on the LAN doesn't have one.
+  voterId = crypto.randomUUID?.() ?? [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
   try { localStorage.setItem('board:voter', voterId); } catch {} // private mode: a new id per visit
 }
 let me = null;                 // this browser's voter hash in this room, from hello
@@ -80,7 +82,7 @@ let suggestThreshold = 0.72;   // from the server, with each batch of suggestion
 const pairSim = new Map();     // pairKey -> similarity, from the server's suggestions
 let drag = null;
 let renderPending = false;
-let fitNext = true;            // fit the view to the board once the next state arrives
+let fitNext = 'first';         // fit the view to the board once the next state arrives ('first': the page's first view)
 
 // ---------- Connection ----------
 // Cloud Run bills while a socket is open, so idle tabs let go: hidden for 5 minutes closes the socket
@@ -158,7 +160,7 @@ function onMessage(m) {
   } else if (m.t === 'state') {
     state = m.state;
     render();
-    if (fitNext) { fitNext = false; fit(); }
+    if (fitNext) { fitNext === 'first' ? firstView() : fit(); fitNext = false; }
   } else if (m.t === 'suggestions') {
     suggestThreshold = m.threshold;
     for (const g of m.groups) g.ids.forEach((a, i) => g.ids.forEach((b, j) => pairSim.set(pairKey(a, b), g.sim[i][j])));
@@ -247,15 +249,32 @@ function applyView() {
   viewport.style.backgroundPosition = `${view.x}px ${view.y}px`;
 }
 
-function fit() {
+// The view that shows the whole board, or null when it's empty.
+function fitTarget() {
   const els = [...world.children];
-  if (!els.length) return;
+  if (!els.length) return null;
   const x0 = Math.min(...els.map(e => e.offsetLeft)), y0 = Math.min(...els.map(e => e.offsetTop));
   const x1 = Math.max(...els.map(e => e.offsetLeft + e.offsetWidth)), y1 = Math.max(...els.map(e => e.offsetTop + e.offsetHeight));
   const top = 64, vw = innerWidth, vh = innerHeight - top - 110;
-  view.z = clamp(Math.min(vw / (x1 - x0 + 80), vh / (y1 - y0 + 80)), 0.25, 1);
-  view.x = (vw - (x1 - x0) * view.z) / 2 - x0 * view.z;
-  view.y = top + (vh - (y1 - y0) * view.z) / 2 - y0 * view.z;
+  const z = clamp(Math.min(vw / (x1 - x0 + 80), vh / (y1 - y0 + 80)), 0.25, 1);
+  return { z, x: (vw - (x1 - x0) * z) / 2 - x0 * z, y: top + (vh - (y1 - y0) * z) / 2 - y0 * z };
+}
+
+function fit() {
+  const t = fitTarget();
+  if (!t) return;
+  stopMotion();
+  Object.assign(view, t);
+  applyView();
+}
+
+// Phones open at a readable 100 % on the board's top left corner (the whole board would be ~0.3×);
+// Fit and a double tap show everything.
+function firstView() {
+  const els = [...world.children];
+  if (innerWidth > 720 || !els.length) return fit();
+  const x0 = Math.min(...els.map(e => e.offsetLeft)), y0 = Math.min(...els.map(e => e.offsetTop));
+  Object.assign(view, { z: 1, x: 16 - x0, y: 136 - y0 }); // below the top bar and the tools
   applyView();
 }
 
@@ -505,24 +524,75 @@ function dropTargetAt(cx, cy) {
   return card ? { el: card, id: card.dataset.id } : null;
 }
 
+// Mouse: pressing a card or group drags it (moderators), anywhere else pans.
+// Touch: one finger pans and keeps gliding when flicked, two fingers pinch-zoom and pan together,
+// a long press (moderators) picks up a card or group, and a double tap zooms to 100 % there or back out.
+const pointers = new Map(); // pointerId -> { x, y } of each finger (or mouse button) down on the board
+const LONG_PRESS_MS = 350, TOUCH_SLOP = 8;
+let momentum = null, anim = null, lastTap = null; // a running loop stops once its token is replaced
+const stopMotion = () => (momentum = anim = null);
+
+// Pointer moves can come faster than frames: draw the view once per frame.
+let viewQueued = false;
+function queueView() {
+  if (viewQueued) return;
+  viewQueued = true;
+  requestAnimationFrame(() => { viewQueued = false; applyView(); });
+}
+
 viewport.addEventListener('pointerdown', e => {
   if (e.button !== 0 || e.target.closest('button, input')) return;
-  const base = { sx: e.clientX, sy: e.clientY, moved: false };
+  stopMotion();
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2) return startPinch();
+  if (pointers.size > 2) return;
+  const touch = e.pointerType === 'touch';
+  const base = { pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, moved: false, touch, samples: [{ x: e.clientX, y: e.clientY, t: e.timeStamp }] };
   const card = IS_MOD && e.target.closest('.card');
-  const group = IS_MOD && e.target.closest('.group');
-  if (card) drag = { ...base, kind: 'card', el: card, id: card.dataset.id };
-  else if (group) {
-    const g = state.groups[group.dataset.gid];
-    drag = { ...base, kind: 'group', el: group, id: g.id, ox: g.x, oy: g.y };
-  } else drag = { ...base, kind: 'pan', ox: view.x, oy: view.y };
+  const group = IS_MOD && !card && e.target.closest('.group');
+  const g = group && state.groups[group.dataset.gid];
+  const pick = card ? { kind: 'card', el: card, id: card.dataset.id } : g ? { kind: 'group', el: group, id: g.id, ox: g.x, oy: g.y } : null;
+  if (pick && !touch) { drag = { ...base, ...pick }; return; }
+  drag = { ...base, kind: 'pan', ox: view.x, oy: view.y };
+  // On touch, cards cover most of the board, so a finger that moves pans; one held still picks the card up.
+  if (pick) drag.pressTimer = setTimeout(() => {
+    if (drag?.kind !== 'pan' || drag.moved || drag.pointerId !== e.pointerId) return;
+    drag = { ...base, ...pick };
+    pick.el.classList.add('lifted');
+    navigator.vibrate?.(10);
+  }, LONG_PRESS_MS);
 });
 
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+function startPinch() {
+  clearTimeout(drag?.pressTimer);
+  if (drag && drag.kind !== 'pan') endDrag(null, false); // a second finger cancels a card or group drag
+  const [a, b] = pointers.values();
+  drag = { kind: 'pinch', moved: true, d0: Math.max(dist(a, b), 1), m0: mid(a, b), v0: { ...view } };
+}
+
+function pinchMove() {
+  const [a, b] = pointers.values();
+  const m = mid(a, b), { v0 } = drag, z = clamp(v0.z * dist(a, b) / drag.d0, 0.25, 2);
+  // The board point that was under the fingers when they landed stays under them.
+  view.x = m.x - (drag.m0.x - v0.x) * z / v0.z;
+  view.y = m.y - (drag.m0.y - v0.y) * z / v0.z;
+  view.z = z;
+  queueView();
+}
+
 addEventListener('pointermove', e => {
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (!drag) return;
+  if (drag.kind === 'pinch') return pinchMove();
+  if (e.pointerId !== drag.pointerId) return;
   const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
   if (!drag.moved) {
-    if (Math.hypot(dx, dy) < 4) return;
+    if (Math.hypot(dx, dy) < (drag.touch ? TOUCH_SLOP : 4)) return;
     drag.moved = true;
+    clearTimeout(drag.pressTimer);
     if (drag.kind === 'pan') viewport.classList.add('panning');
     if (drag.kind === 'card') {
       // Lift the card to the world root so it can leave its group.
@@ -534,8 +604,10 @@ addEventListener('pointermove', e => {
     }
   }
   if (drag.kind === 'pan') {
+    drag.samples.push({ x: e.clientX, y: e.clientY, t: e.timeStamp });
+    if (drag.samples.length > 12) drag.samples.shift();
     view.x = drag.ox + dx; view.y = drag.oy + dy;
-    applyView();
+    queueView();
     return;
   }
   drag.el.style.left = drag.ox + dx / view.z + 'px';
@@ -554,7 +626,8 @@ function endDrag(e, commit) {
   const d = drag;
   drag = null;
   viewport.classList.remove('panning');
-  if (!d || !d.moved || !commit || d.kind === 'pan') { if (renderPending || (d?.moved && d.kind !== 'pan')) render(); return; }
+  d?.el?.classList.remove('lifted');
+  if (!d || !d.moved || !commit || d.kind === 'pan' || d.kind === 'pinch') { if (renderPending || (d?.moved && d.el)) render(); return; }
   const pos = { x: parseFloat(d.el.style.left), y: parseFloat(d.el.style.top) };
   // The dragged element stays where it was dropped until the server's state arrives and re-renders it.
   if (d.kind === 'group') op('moveGroup', { id: d.id, pos });
@@ -563,23 +636,83 @@ function endDrag(e, commit) {
     op('drop', { id: d.id, target: t && (t.gid ? { gid: t.gid } : { id: t.id }), pos });
   }
 }
-addEventListener('pointerup', e => endDrag(e, true));
-addEventListener('pointercancel', e => endDrag(e, false));
+
+function pointerEnd(e, commit) {
+  if (!pointers.delete(e.pointerId) || !drag) return;
+  if (drag.kind === 'pinch') {
+    // One finger left: carry on panning with it, from where it is now (no jump).
+    const [rest] = pointers;
+    if (rest) drag = { kind: 'pan', pointerId: rest[0], sx: rest[1].x, sy: rest[1].y, ox: view.x, oy: view.y, moved: true, touch: true, samples: [] };
+    else endDrag(e, false);
+    return;
+  }
+  if (e.pointerId !== drag.pointerId) return;
+  clearTimeout(drag.pressTimer);
+  if (commit && drag.touch && drag.kind === 'pan') drag.moved ? glide(drag, e) : tap(e);
+  endDrag(e, commit);
+}
+addEventListener('pointerup', e => pointerEnd(e, true));
+addEventListener('pointercancel', e => pointerEnd(e, false));
+
+// Momentum: keep the flick's speed (from the last 100 ms of the pan) and let friction slow it down.
+function glide(d, e) {
+  const recent = d.samples.filter(p => e.timeStamp - p.t < 100);
+  if (recent.length < 2 || e.timeStamp - recent.at(-1).t > 60) return; // finger stopped before lifting
+  const a = recent[0], b = recent.at(-1), dt = b.t - a.t;
+  if (dt <= 0) return;
+  let vx = (b.x - a.x) / dt, vy = (b.y - a.y) / dt; // px per ms
+  if (Math.hypot(vx, vy) < 0.1) return;
+  const run = momentum = {};
+  let last = performance.now();
+  requestAnimationFrame(function step(now) {
+    if (momentum !== run) return;
+    const ms = Math.min(now - last, 32);
+    last = now;
+    view.x += vx * ms; view.y += vy * ms;
+    applyView();
+    const k = 0.95 ** (ms / 16);
+    vx *= k; vy *= k;
+    if (Math.hypot(vx, vy) > 0.02) requestAnimationFrame(step);
+    else momentum = null;
+  });
+}
+
+// Double tap: zoom in to 100 % around the tap, or back out to the whole board.
+function tap(e) {
+  const double = lastTap && e.timeStamp - lastTap.t < 300 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30;
+  lastTap = double ? null : { t: e.timeStamp, x: e.clientX, y: e.clientY };
+  if (double) animateView(view.z < 0.9 ? zoomAt(e.clientX, e.clientY, 1) : fitTarget());
+}
+
+const zoomAt = (cx, cy, z) => ({ z, x: cx - (cx - view.x) * z / view.z, y: cy - (cy - view.y) * z / view.z });
+
+function animateView(to, ms = 260) {
+  if (!to) return;
+  const from = { ...view }, t0 = performance.now(), run = anim = {};
+  requestAnimationFrame(function step(now) {
+    if (anim !== run) return;
+    const t = Math.min(1, (now - t0) / ms), k = 1 - (1 - t) ** 3; // ease out
+    for (const key of ['x', 'y', 'z']) view[key] = from[key] + (to[key] - from[key]) * k;
+    applyView();
+    if (t < 1) requestAnimationFrame(step);
+    else anim = null;
+  });
+}
 
 // Figma-style: scroll pans, pinch or Ctrl/Cmd+scroll zooms around the cursor.
 viewport.addEventListener('wheel', e => {
   e.preventDefault();
-  if (e.ctrlKey || e.metaKey) {
-    const z = clamp(view.z * Math.exp(-e.deltaY * 0.01), 0.25, 2);
-    view.x = e.clientX - (e.clientX - view.x) * z / view.z;
-    view.y = e.clientY - (e.clientY - view.y) * z / view.z;
-    view.z = z;
-  } else {
+  stopMotion();
+  if (e.ctrlKey || e.metaKey) Object.assign(view, zoomAt(e.clientX, e.clientY, clamp(view.z * Math.exp(-e.deltaY * 0.01), 0.25, 2)));
+  else {
     view.x -= e.deltaX;
     view.y -= e.deltaY;
   }
-  applyView();
+  queueView();
 }, { passive: false });
+
+// Safari zooms the whole page on a pinch outside the canvas (toolbar, composer); the board has its own zoom.
+document.addEventListener('gesturestart', e => e.preventDefault());
 
 // ---------- Composer ----------
 
@@ -616,12 +749,18 @@ function showSimilarResult(m) {
     }, icon('up'), already ? 'You upvoted it' : 'Upvote it instead'));
 }
 
+// Phone keyboards have their own Enter key hint, so no "Enter to post" there.
+if (matchMedia('(pointer: coarse)').matches) draft.placeholder = 'Ask anonymously…';
 $('#composer').addEventListener('submit', e => { e.preventDefault(); post(); });
 let similarTimer;
 draft.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); post(); } });
 // 200 chars keeps any question well inside the model's 128-token window (~0.24-0.44 tokens/char in pt-BR)
 // and nudges one question per card, which embeds (and groups) better than several packed together.
-const showCount = () => ($('#count').textContent = `${draft.value.length}/${draft.maxLength}`);
+// The counter only shows near the limit.
+const showCount = () => {
+  $('#count').textContent = `${draft.value.length}/${draft.maxLength}`;
+  $('#count').hidden = draft.value.length < 150;
+};
 draft.addEventListener('input', () => {
   showCount();
   draft.style.height = 'auto';
@@ -661,7 +800,7 @@ $('#moreBtn').addEventListener('click', () => showMore(more.hidden));
 more.addEventListener('click', e => e.target.closest('button') && showMore(false));
 addEventListener('pointerdown', e => { if (!e.target.closest('#more, #moreBtn')) showMore(false); });
 addEventListener('keydown', e => { if (e.key === 'Escape' && !more.hidden) { showMore(false); $('#moreBtn').focus(); } });
-$('#fit').addEventListener('click', fit);
+$('#fit').addEventListener('click', () => animateView(fitTarget()));
 $('#sort').addEventListener('click', sortBoard);
 $('#presentBtn').addEventListener('click', startPresenting);
 $('#demo').addEventListener('click', () => { op('demo'); fitNext = true; });
