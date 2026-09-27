@@ -724,11 +724,15 @@ $('#landing').addEventListener('submit', async e => {
   e.preventDefault();
   const button = e.target.querySelector('button');
   button.disabled = true;
+  const create = () => fetch(`${SERVER}/rooms`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: $('#roomTitle').value }),
+  });
   try {
-    const res = await fetch(`${SERVER}/rooms`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ title: $('#roomTitle').value }),
-    });
+    // A request that never got through (seen now and then on a browser's first call) is retried once.
+    // Only network failures: an HTTP error, like the rate limit, is shown as is. If the first request
+    // did create a room and only the reply was lost, that room is left empty and expires.
+    const res = await create().catch(() => new Promise(r => setTimeout(r, 1000)).then(create));
     const body = await res.json();
     if (!res.ok) throw new Error(body.error);
     location.hash = `r=${body.roomId}&k=${body.modKey}`; // reloads into the room, below
